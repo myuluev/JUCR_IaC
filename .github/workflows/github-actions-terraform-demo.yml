@@ -1,0 +1,83 @@
+name: AWS MongoDB deployment
+
+on:
+  workflow_call:
+  push:
+    branches: [ "*" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_KEY }}
+  MONGODB_ATLAS_PRIVATE_KEY: ${{ secrets.MONGODB_ATLAS_PRIVATE_KEY }}
+  MONGODB_ATLAS_PUBLIC_KEY: ${{ secrets.MONGODB_ATLAS_PUBLIC_KEY }}
+
+permissions: read-all
+
+jobs:
+  tf_code_check:
+    name: Terraform Validation and Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: ./aws_terraform
+
+    steps:
+      - name: Checkout tf code in runner environment
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform CLI
+        uses: hashicorp/setup-terraform@v2.0.2
+
+        # Checks-out your repository under $GITHUB_WORKSPACE, so follow-up steps can access it
+#      - uses: actions/checkout@v3
+
+      - name: Checkov GitHub Action
+        uses: bridgecrewio/checkov-action@v12
+#        with:
+          # This will add both a CLI output to the console and create a results.sarif file
+#          output_format: cli,sarif
+#          output_file_path: console,results.sarif
+        # Advanced Security is only available for Organizations
+#      - name: Upload SARIF file
+#        uses: github/codeql-action/upload-sarif@v2
+
+        # Results are generated only on a success or failure
+        # this is required since GitHub by default won't run the next step
+        # when the previous one has failed. Security checks that do not pass will 'fail'.
+        # An alternative is to add `continue-on-error: true` to the previous step
+        # Or 'soft_fail: true' to checkov.
+        if: success() || failure()
+        with:
+          sarif_file: results.sarif
+
+#      - name: Render terraform docs and push changes back to PR
+#        uses: terraform-docs/gh-actions@main
+#        with:
+#          working-dir: .
+#          output-file: README.md
+#          output-method: inject
+#          git-push: "true"
+
+      - name: Terraform init and validate
+        run: |
+          echo "** Running Terraform Init**"
+          terraform init 
+          
+          echo "** Running Terraform Validate**"
+          terraform validate
+
+      - name: Terraform plan and apply
+        run: |
+          echo "** Running Terraform Plan**"
+          terraform plan -out=tfplan 
+
+          echo "** Running Terraform Apply**"
+          terraform apply -auto-approve -lock=false
+
+#      - name: Terraform Destroy
+#        run: |
+#          echo "** Running Terraform Destroy**"
+#          terraform destroy -auto-approve
